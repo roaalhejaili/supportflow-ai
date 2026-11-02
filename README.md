@@ -91,6 +91,16 @@ flowchart LR
 
 Code node sources, the SDK workflow definitions and tests live in [`n8n/`](n8n/).
 
+**Support API** – key check → validation → knowledge base → FAQ match → Gemini only when needed →
+ticket logged → Gmail only for escalations → JSON reply.
+
+![Support API workflow in n8n](docs/screenshots/n8n-support-api.png)
+
+**Reservations API** – key check → validation → read Availability and Reservations → decide
+(capacity, duplicates, 24-hour rule) → one sheet write → confirm only after it is saved.
+
+![Reservations API workflow in n8n](docs/screenshots/n8n-reservations-api.png)
+
 ### Support API
 
 Request
@@ -298,3 +308,7 @@ The UI (support chat, admin dashboard, design system) was scaffolded with
 [Lovable](https://lovable.dev). The reservations feature, server-side proxies, n8n workflows,
 knowledge-base routing, tests and live integration were built afterwards with AI-assisted
 development (Claude Code).
+
+## License
+
+[MIT](LICENSE) © 2026 Roaa Alhejaili
