@@ -1,7 +1,6 @@
 {
   "name": "supportflow-ai",
   "private": true,
-  "license": "MIT",
   "sideEffects": false,
   "type": "module",
   "scripts": {

@@ -308,7 +308,3 @@ The UI (support chat, admin dashboard, design system) was scaffolded with
 [Lovable](https://lovable.dev). The reservations feature, server-side proxies, n8n workflows,
 knowledge-base routing, tests and live integration were built afterwards with AI-assisted
 development (Claude Code).
-
-## License
-
-[MIT](LICENSE) © 2026 Roaa Alhejaili
