@@ -36,7 +36,7 @@ export interface Ticket extends SupportRequest, SupportResponse {
 export class SupportApiError extends Error {
   constructor(
     message: string,
-    public code: "network" | "timeout" | "invalid_response" | "not_configured" | "server" | "validation",
+    public code: "network" | "timeout" | "invalid_response" | "not_configured" | "server" | "validation" | "human_check" | "rate_limited",
   ) {
     super(message);
     this.name = "SupportApiError";

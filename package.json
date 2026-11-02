@@ -8,6 +8,7 @@
     "build": "vite build",
     "build:dev": "vite build --mode development",
     "build:pages": "node scripts/build-pages.mjs",
+    "deploy:live": "node scripts/deploy-live.mjs",
     "preview": "node --env-file-if-exists=.env node_modules/vite/bin/vite.js preview",
     "lint": "eslint .",
     "format": "prettier --write .",
@@ -17,7 +18,8 @@
     "check:n8n": "node --env-file=.env scripts/check-n8n.mjs",
     "typecheck": "tsc --noEmit",
     "build:n8n": "python n8n/build.py",
-    "build:n8n:local": "python n8n/build.py --local"
+    "build:n8n:local": "python n8n/build.py --local",
+    "build:n8n:public": "python n8n/build.py --public"
   },
   "overrides": {
     "rolldown": "1.2.1"
@@ -98,6 +100,7 @@
     "typescript": "^5.8.3",
     "typescript-eslint": "^8.56.1",
     "vite": "8.1.5",
-    "vitest": "^4.1.10"
+    "vitest": "^4.1.10",
+    "wrangler": "^4.156.1"
   }
 }

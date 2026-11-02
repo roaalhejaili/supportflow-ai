@@ -1,5 +1,6 @@
 import { createServerFn } from "@tanstack/react-start";
 import { supportRequestSchema, supportResponseSchema, type SupportResponse } from "@/types/support";
+import { checkDemoGuard } from "./demo-guard";
 
 export type ProxyResult =
   | { ok: true; data: SupportResponse }
@@ -7,7 +8,7 @@ export type ProxyResult =
       ok: false;
       status: number;
       error: string;
-      code: "not_configured" | "timeout" | "server" | "invalid_response" | "validation";
+      code: "not_configured" | "timeout" | "server" | "invalid_response" | "validation" | "human_check" | "rate_limited";
     };
 
 // n8n may call Gemini, so allow more time than a plain FAQ lookup needs.
@@ -24,6 +25,9 @@ type N8nError = { error?: { code?: unknown; message?: unknown; details?: unknown
 export const supportProxy = createServerFn({ method: "POST" })
   .inputValidator((input: unknown) => supportRequestSchema.parse(input))
   .handler(async ({ data }): Promise<ProxyResult> => {
+    const blocked = await checkDemoGuard("support");
+    if (blocked) return { ok: false, status: blocked.status, code: blocked.code, error: blocked.message };
+
     const url = process.env["N8N_WEBHOOK_URL"];
     const secret = process.env["N8N_WEBHOOK_SECRET"];
     if (!url || !secret) {

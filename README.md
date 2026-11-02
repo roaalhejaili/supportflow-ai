@@ -8,8 +8,13 @@ escalates to the support team by Gmail, and manages table reservations.
 > All business policies in the knowledge base and reservation rules are **fictional demo
 > policies** created for this portfolio project.
 
-**Live demo:** https://roaalhejaili.github.io/supportflow-ai/ – runs in **demo mode** only
-(in-browser mock data). It never calls n8n, so nothing is logged, booked or emailed.
+**Try it**
+
+- **Live version (real AI backend):** https://supportflow-ai.supportflow-ai.workers.dev –
+  answers come from the n8n workflows, the knowledge base and Gemini. Protected by a one-time
+  bot check; uses demo copies of the Google Sheets and never sends emails.
+- **Demo mode:** https://roaalhejaili.github.io/supportflow-ai/ – in-browser mock data only,
+  no backend calls.
 
 ## Screenshots
 
@@ -82,6 +87,7 @@ flowchart LR
 | SupportFlow AI | Form | Original form-based workflow (kept in n8n, not part of this repo) |
 | SupportFlow AI - API | `POST /webhook/supportflow-ai-api` | Validate → load KB → match FAQ → (Gemini) → log ticket → (Gmail) → JSON |
 | SupportFlow AI - Reservations API | `POST /webhook/supportflow-reservations` | Validate → load Availability + Reservations → decide → (one sheet write) → JSON |
+| … (public demo) copies | `POST /webhook/…-public` | Same logic for the public live demo: own key, demo Sheet copies, no Gmail step |
 
 Code node sources, the SDK workflow definitions and tests live in [`n8n/`](n8n/).
 
@@ -153,12 +159,11 @@ Errors: `{ "success": false, "error": { "code", "message", "details?", "alternat
   in front of the workflow) would remove this race.
 - **Admin dashboard uses demo data.** It is not connected to the Tickets sheet and has no login.
 - **No ticket IDs.** The Tickets sheet has no ID column, so `ticket_id` is always `null`.
-- **Not every path is verified live.** The Gemini fallback (when it is chosen is covered by
-  the local routing tests) and modifying a booking (local logic tests) have not been run
-  against the live services (see [Testing](#testing)).
+- **Modifying a booking is not verified live.** It is covered by the local logic tests only
+  (see [Testing](#testing)).
+- **Public demo rate limit is best-effort.** It is kept in memory per Cloudflare instance; the
+  Turnstile check is the main protection.
 - **Fictional policies.** Hours, refund rules and reservation policies are demo content.
-- **`npm run typecheck`** reports pre-existing type errors in the generated demo data
-  (`src/data/sampleTickets.ts`); the build is unaffected.
 
 ## Getting started
 
@@ -215,6 +220,17 @@ cancellation, and Google Sheets read/write failures (a failed save is never conf
 | Book → look up → cancel | Row saved with the returned reservation ID; lookup by ID + email; status set to Cancelled; seats restored |
 | FAQ question | Answered directly from the matching FAQ (no Gemini call), ticket logged, no email |
 | Question with no matching FAQ | Escalated: ticket logged and team notified by Gmail |
+| Two-part question | Answered by Gemini using only the two matching FAQs, resolved, no email |
+
+**Verified on the public live demo** (Cloudflare Worker → public n8n copies → demo Sheets):
+
+| Scenario | Result |
+| --- | --- |
+| Request without passing the bot check | Refused by the server (`human_check`); nothing reaches n8n |
+| Request from another site | Refused by TanStack Start's same-origin protection |
+| Private key used on the public webhooks | `401` – the public copies have their own key |
+| FAQ and Gemini questions after the check | Answered; tickets logged in the demo Sheet only, no email |
+| Browser code | Contains no keys, n8n URLs or server-only code |
 
 ### Public demo (GitHub Pages)
 
@@ -227,6 +243,27 @@ the n8n proxies are not deployed. The script fails if the output is not in demo 
 any n8n URLs, header names or the local API key. `.github/workflows/pages.yml` runs the tests
 and this build on every push to `main` and deploys `dist/client` to GitHub Pages (no secrets).
 
+### Public live demo (Cloudflare Workers)
+
+```bash
+npm run deploy:live -- --dry-run   # build and run the safety checks without uploading
+npm run deploy:live                # build in live mode and deploy the Worker
+```
+
+The full app (including the server-side proxies) runs on Cloudflare's free Workers plan and
+talks to the **public demo** copies of the n8n workflows (`npm run build:n8n:public`), which
+have their own key, use demo copies of the Google Sheets and have no Gmail step.
+
+- **Secrets** live only in Cloudflare (`wrangler secret put`): `N8N_WEBHOOK_URL`,
+  `N8N_RESERVATIONS_URL`, `N8N_WEBHOOK_SECRET` (the public key) and `TURNSTILE_SECRET_KEY`.
+- **Bot check:** one Cloudflare Turnstile check per visit; the server verifies it and sets a
+  signed, HttpOnly cookie for 2 hours. Chat and reservation calls without it are refused.
+- **Rate limit:** 15 support messages and 60 reservation calls per visitor per 10 minutes.
+- **Banner:** visitors are told it is a demo with fictional policies and no emails.
+- The deploy script blocks the upload if any key, n8n URL or server-only code would reach the
+  browser files. Without the Turnstile settings (local development, GitHub Pages) none of this
+  is active.
+
 ## Project structure
 
 ```
@@ -235,7 +272,8 @@ src/
   components/support/     chat UI
   components/reservations/ booking form, manage booking, date/time pickers
   components/admin/       dashboard + ticket panel
-  services/               API clients, server-side proxies (*.functions.ts), demo mocks
+  services/               API clients, server-side proxies (*.functions.ts), demo mocks,
+                          public-demo guard (bot check + rate limit)
   types/                  zod schemas and types
 n8n/
   support-api/            Code nodes, KB snapshot, routing tests, workflow template
@@ -244,6 +282,7 @@ n8n/
   build.py                regenerates the importable SDK workflow code
 scripts/check-n8n.mjs     live connectivity check
 scripts/build-pages.mjs   static demo build for GitHub Pages (with safety checks)
+scripts/deploy-live.mjs   public live demo build + deploy to Cloudflare (with safety checks)
 .github/workflows/        GitHub Pages deployment
 docs/screenshots/         README screenshots
 ```

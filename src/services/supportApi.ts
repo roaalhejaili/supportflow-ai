@@ -1,4 +1,4 @@
-import { USE_MOCK_API } from "./config";
+import { HUMAN_CHECK_EVENT, USE_MOCK_API } from "./config";
 import { mockSubmitSupportMessage } from "./mockSupportApi";
 import { supportProxy } from "./support-proxy.functions";
 import {
@@ -21,7 +21,10 @@ export async function submitSupportMessage(req: SupportRequest): Promise<Support
       raw = await mockSubmitSupportMessage(input.data);
     } else {
       const result = await supportProxy({ data: input.data });
-      if (!result.ok) throw new SupportApiError(result.error, result.code);
+      if (!result.ok) {
+        if (result.code === "human_check") window.dispatchEvent(new Event(HUMAN_CHECK_EVENT));
+        throw new SupportApiError(result.error, result.code);
+      }
       raw = result.data;
     }
   } catch (e) {

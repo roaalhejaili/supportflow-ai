@@ -2,6 +2,10 @@
 
     python n8n/build.py           # public build: safe placeholders -> workflow.ts (committed)
     python n8n/build.py --local   # your values from .env -> workflow.local.ts (git-ignored)
+    python n8n/build.py --public  # public live-demo copies -> workflow.public.ts (git-ignored)
+
+The --public variant is for an internet-facing demo: its own webhook paths and key, demo
+copies of the Google Sheets, and escalations are logged but never emailed.
 
 Paste the output into n8n's MCP/SDK tooling (validate_workflow / create_workflow_from_code)
 to recreate a workflow. Instance-specific values (Sheet IDs, credential IDs, the support
@@ -14,7 +18,8 @@ import sys
 from pathlib import Path
 
 here = Path(__file__).parent
-local = "--local" in sys.argv
+public = "--public" in sys.argv
+local = "--local" in sys.argv or public
 
 # Token in the templates -> (environment variable, public placeholder)
 PLACEHOLDERS = {
@@ -45,10 +50,64 @@ if local:
     # Only the hash of the shared key is ever written, never the key itself.
     if not env.get("N8N_KEY_SHA256") and env.get("N8N_WEBHOOK_SECRET"):
         env["N8N_KEY_SHA256"] = hashlib.sha256(env["N8N_WEBHOOK_SECRET"].encode()).hexdigest()
+    if public:
+        # Separate key and demo sheets; no Gmail is used by the public copy.
+        public_key = env.get("N8N_PUBLIC_WEBHOOK_SECRET", "")
+        env["N8N_KEY_SHA256"] = hashlib.sha256(public_key.encode()).hexdigest() if public_key else ""
+        env["N8N_KB_SHEET_ID"] = env.get("N8N_DEMO_KB_SHEET_ID") or "PENDING_DEMO_KB_SHEET_ID"
+        env["N8N_TICKETS_SHEET_ID"] = env.get("N8N_DEMO_TICKETS_SHEET_ID") or "PENDING_DEMO_TICKETS_SHEET_ID"
+        env["N8N_GMAIL_CREDENTIAL_ID"] = "NOT_USED_IN_PUBLIC_DEMO"
+        env["SUPPORT_TEAM_EMAIL"] = "not-used@example.com"
     missing = [var for var, _ in PLACEHOLDERS.values() if not env.get(var)]
     if missing:
         sys.exit("Missing in .env or environment: " + ", ".join(missing))
     values = {token: env[var] for token, (var, _) in PLACEHOLDERS.items()}
+
+
+NO_EMAIL_NOTE = "in the full app our support team would reply by email (this public demo does not send emails)."
+# Explicit, checked changes for the public variant: (file, old text, new text).
+PUBLIC_PATCHES = [
+    ("support-api/workflow.template.ts", "path: 'supportflow-ai-api',", "path: 'supportflow-ai-api-public',"),
+    ("support-api/workflow.template.ts", ".onTrue(notifyTeam.to(buildResponse))", ".onTrue(buildResponse)"),
+    ("support-api/workflow.template.ts", "workflow('supportflow-ai-api', 'SupportFlow AI - API')",
+     "workflow('supportflow-ai-api-public', 'SupportFlow AI - API (public demo)')"),
+    ("reservations-api/workflow.template.ts", "path: 'supportflow-reservations',", "path: 'supportflow-reservations-public',"),
+    ("reservations-api/workflow.template.ts", "workflow('supportflow-reservations', 'SupportFlow AI - Reservations API')",
+     "workflow('supportflow-reservations-public', 'SupportFlow AI - Reservations API (public demo)')"),
+    # Demo copies of the spreadsheets: select the Tickets tab by name so it survives "Make a copy".
+    ("support-api/workflow.template.ts",
+     "documentId: { __rl: true, mode: 'list', value: '__KB_SHEET_ID__', cachedResultName: 'SupportFlow AI Knowledge Base', cachedResultUrl: 'https://docs.google.com/spreadsheets/d/__KB_SHEET_ID__/edit?usp=drivesdk' },",
+     "documentId: { __rl: true, mode: 'list', value: '__KB_SHEET_ID__', cachedResultName: 'SupportFlow AI Knowledge Base (demo copy)' },"),
+    ("support-api/workflow.template.ts",
+     "documentId: { __rl: true, mode: 'list', value: '__TICKETS_SHEET_ID__', cachedResultName: 'SupportFlow_AI_Tickets', cachedResultUrl: 'https://docs.google.com/spreadsheets/d/__TICKETS_SHEET_ID__/edit?usp=drivesdk' },",
+     "documentId: { __rl: true, mode: 'list', value: '__TICKETS_SHEET_ID__', cachedResultName: 'SupportFlow_AI_Tickets (demo copy)' },"),
+    ("support-api/workflow.template.ts",
+     "sheetName: { __rl: true, mode: 'list', value: 285209571, cachedResultName: 'Tickets', cachedResultUrl: 'https://docs.google.com/spreadsheets/d/__TICKETS_SHEET_ID__/edit#gid=285209571' },",
+     "sheetName: { __rl: true, mode: 'name', value: 'Tickets' },"),
+    ("reservations-api/workflow.template.ts",
+     "cachedResultName: 'SupportFlow AI Knowledge Base' };", "cachedResultName: 'SupportFlow AI Knowledge Base (demo copy)' };"),
+    ("support-api/find_best_faq_match.js", "our support team will reply to you by email.", NO_EMAIL_NOTE),
+    ("support-api/finalize_answer.js", "our support team will reply to you by email.", NO_EMAIL_NOTE),
+    ("support-api/build_response.js",
+     "  // The customer is told the team will reply by email, so that must be true.\n"
+     "  if (!escalationNotified) {\n"
+     "    throw new Error('Support team notification was not sent' + (ticketLogged ? ' (ticket was logged)' : ' and ticket was not logged'));\n"
+     "  }\n",
+     "  // Public demo: escalations are logged in the demo sheet but never emailed.\n"),
+    ("support-api/build_response.js", "if (!ticketLogged) warnings.push('ticket_not_logged');\n",
+     "if (!ticketLogged) warnings.push('ticket_not_logged');\nif (t.requires_human) warnings.push('public_demo_no_email');\n"),
+]
+
+
+def read(path: str) -> str:
+    text = (here / path).read_text(encoding="utf-8")
+    if public:
+        for file, old, new in PUBLIC_PATCHES:
+            if file == path:
+                if text.count(old) != 1:
+                    sys.exit(f"Public patch did not apply exactly once in {path}: {old[:60]!r}")
+                text = text.replace(old, new)
+    return text
 
 
 def fill(text: str) -> str:
@@ -58,7 +117,7 @@ def fill(text: str) -> str:
 
 
 def js(folder: str, name: str) -> str:
-    return json.dumps(fill((here / folder / name).read_text(encoding="utf-8")))
+    return json.dumps(fill(read(f"{folder}/{name}" if folder != "." else name)))
 
 
 check_key = js(".", "check_api_key.js")
@@ -90,9 +149,9 @@ err_body = (
 ticket_columns = ["Timestamp", "Customer Name", "Customer Email", "Original Message", "Category", "Priority",
                   "Suggested Response", "Requires Human", "Intent", "Knowledge Source", "Action Taken", "Resolution Status"]
 
-out_name = "workflow.local.ts" if local else "workflow.ts"
+out_name = "workflow.public.ts" if public else "workflow.local.ts" if local else "workflow.ts"
 
-support = (fill((here / "support-api" / "workflow.template.ts").read_text(encoding="utf-8"))
+support = (fill(read("support-api/workflow.template.ts"))
            .replace("__CHECKKEY__", check_key)
            .replace("__VALIDATE__", js("support-api", "validate_request.js"))
            .replace("__FIND__", js("support-api", "find_best_faq_match.js"))
@@ -105,7 +164,7 @@ support = (fill((here / "support-api" / "workflow.template.ts").read_text(encodi
 
 # --- Reservations API ----------------------------------------------------------
 reservation_columns = ["Reservation ID", "Customer Name", "Customer Email", "Date", "Time", "Number of Guests", "Status"]
-reservations = (fill((here / "reservations-api" / "workflow.template.ts").read_text(encoding="utf-8"))
+reservations = (fill(read("reservations-api/workflow.template.ts"))
                 .replace("__CHECKKEY__", check_key)
                 .replace("__SCHEMA__", schema(reservation_columns))
                 .replace("__VALIDATE__", js("reservations-api", "validate_request.js"))

@@ -1,4 +1,4 @@
-import { USE_MOCK_API } from "./config";
+import { HUMAN_CHECK_EVENT, USE_MOCK_API } from "./config";
 import { mockReservationRequest } from "./mockReservationsApi";
 import { reservationsProxy } from "./reservations-proxy.functions";
 import {
@@ -17,6 +17,7 @@ async function call(req: ReservationRequest): Promise<unknown> {
   } catch {
     throw new ReservationApiError("We couldn't reach reservations. Check your connection and try again.", "network");
   }
+  if (!result.ok && result.code === "human_check") window.dispatchEvent(new Event(HUMAN_CHECK_EVENT));
   if (!result.ok) throw new ReservationApiError(result.message, result.code, result.details ?? [], result.alternatives ?? []);
   return result.data;
 }

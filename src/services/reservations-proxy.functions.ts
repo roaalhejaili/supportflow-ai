@@ -1,5 +1,6 @@
 import { createServerFn } from "@tanstack/react-start";
 import { reservationErrorSchema, reservationRequestSchema } from "@/types/reservations";
+import { checkDemoGuard } from "./demo-guard";
 
 // Server function results must be serializable; the client validates the shape with zod.
 type Json = string | number | boolean | null | Json[] | { [key: string]: Json };
@@ -26,6 +27,9 @@ const UNAVAILABLE = "Reservations are temporarily unavailable. Please try again 
 export const reservationsProxy = createServerFn({ method: "POST" })
   .inputValidator((input: unknown) => reservationRequestSchema.parse(input))
   .handler(async ({ data }): Promise<ReservationProxyResult> => {
+    const blocked = await checkDemoGuard("reservations");
+    if (blocked) return { ok: false, status: blocked.status, code: blocked.code, message: blocked.message };
+
     const url = process.env["N8N_RESERVATIONS_URL"];
     const secret = process.env["N8N_WEBHOOK_SECRET"];
     if (!url || !secret) {

@@ -23,6 +23,7 @@ dist-ssr
 
 # n8n workflows built with your real IDs (python n8n/build.py --local)
 workflow.local.ts
+workflow.public.ts
 
 # Wrangler / Cloudflare
 .wrangler/
