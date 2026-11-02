@@ -8,6 +8,9 @@ escalates to the support team by Gmail, and manages table reservations.
 > All business policies in the knowledge base and reservation rules are **fictional demo
 > policies** created for this portfolio project.
 
+**Live demo:** https://roaalhejaili.github.io/supportflow-ai/ – runs in **demo mode** only
+(in-browser mock data). It never calls n8n, so nothing is logged, booked or emailed.
+
 ## Screenshots
 
 Taken in **demo mode** (in-browser mock data, no backend). With the live backend, chat
@@ -213,6 +216,17 @@ cancellation, and Google Sheets read/write failures (a failed save is never conf
 | FAQ question | Answered directly from the matching FAQ (no Gemini call), ticket logged, no email |
 | Question with no matching FAQ | Escalated: ticket logged and team notified by Gmail |
 
+### Public demo (GitHub Pages)
+
+```bash
+npm run build:pages   # static demo build in dist/client, served from /supportflow-ai/
+```
+
+The demo build is a static single-page app with demo mode forced on and no server output, so
+the n8n proxies are not deployed. The script fails if the output is not in demo mode or contains
+any n8n URLs, header names or the local API key. `.github/workflows/pages.yml` runs the tests
+and this build on every push to `main` and deploys `dist/client` to GitHub Pages (no secrets).
+
 ## Project structure
 
 ```
@@ -229,6 +243,8 @@ n8n/
   check_api_key.js        API key check (SHA-256) used as the first node of both workflows
   build.py                regenerates the importable SDK workflow code
 scripts/check-n8n.mjs     live connectivity check
+scripts/build-pages.mjs   static demo build for GitHub Pages (with safety checks)
+.github/workflows/        GitHub Pages deployment
 docs/screenshots/         README screenshots
 ```
 
